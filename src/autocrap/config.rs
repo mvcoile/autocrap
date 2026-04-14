@@ -1,18 +1,18 @@
-use std::{net::{SocketAddrV4}};
+use std::net::SocketAddrV4;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum OnOffMode {
     Raw,
     Momentary,
-    Toggle
+    Toggle,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum RelativeMode {
     Raw,
-    Accumulate
+    Accumulate,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -29,6 +29,7 @@ pub enum MidiKind {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[allow(unused)]
 pub enum Mode {
     Raw,
     Accumulate,
@@ -46,7 +47,7 @@ impl MidiSpec {
         MidiSpec {
             channel: self.channel,
             kind: self.kind,
-            num: self.num + i
+            num: self.num + i,
         }
     }
 }
@@ -65,9 +66,12 @@ impl Mapping {
     pub fn index(&self, i: u8) -> Mapping {
         Mapping {
             name: self.name.replace("{i}", &i.to_string()),
-            ctrl_in_sequence: self.ctrl_in_sequence.as_ref().map(|s| s.iter().map(|n| n+i).collect()),
-            ctrl_in_num: self.ctrl_in_num.map(|n| n+i),
-            ctrl_out_num: self.ctrl_out_num.map(|n| n+i),
+            ctrl_in_sequence: self
+                .ctrl_in_sequence
+                .as_ref()
+                .map(|s| s.iter().map(|n| n + i).collect()),
+            ctrl_in_num: self.ctrl_in_num.map(|n| n + i),
+            ctrl_out_num: self.ctrl_out_num.map(|n| n + i),
             ctrl_kind: self.ctrl_kind,
             midi: self.midi.map(|m| m.index(i)),
         }
@@ -81,10 +85,7 @@ impl Mapping {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AbstractMapping {
     Single(Mapping),
-    Range {
-        count: u8,
-        mapping: Mapping
-    }
+    Range { count: u8, mapping: Mapping },
 }
 
 impl AbstractMapping {
@@ -106,7 +107,7 @@ impl AbstractMapping {
 pub struct OscInterface {
     pub host_addr: SocketAddrV4,
     pub out_addr: SocketAddrV4,
-    pub in_addr: SocketAddrV4
+    pub in_addr: SocketAddrV4,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -120,13 +121,13 @@ pub enum MidiPort {
 pub struct MidiInterface {
     pub client_name: String,
     pub out_port: MidiPort,
-    pub in_port: MidiPort
+    pub in_port: MidiPort,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Interface {
     Osc(OscInterface),
-    Midi(MidiInterface)
+    Midi(MidiInterface),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +137,5 @@ pub struct Config {
     pub in_endpoint: u8,
     pub out_endpoint: u8,
     pub interface: Interface,
-    pub mappings: Vec<AbstractMapping>
+    pub mappings: Vec<AbstractMapping>,
 }
-

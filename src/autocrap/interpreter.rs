@@ -1,24 +1,27 @@
-use log::{warn, info};
+use log::{info, warn};
 use rosc::{OscMessage, OscType};
 
 use super::config::{Config, CtrlKind, Mapping, MidiKind, MidiSpec, OnOffMode, RelativeMode};
 
+type CtrlLogicBox = Box<dyn CtrlLogic>;
+type CtrlConstructor = Box<dyn Fn(&Mapping) -> Option<CtrlLogicBox>>;
+
 #[derive(Debug)]
 pub struct Interpreter {
-    ctrls: Vec<Box<dyn CtrlLogic>>,
+    ctrls: Vec<CtrlLogicBox>,
 }
 
 impl Interpreter {
     pub fn new(config: &Config) -> Interpreter {
-        let constructors: Vec<Box<dyn Fn(&Mapping) -> Option<Box<dyn CtrlLogic>>>> = vec![
+        let constructors: Vec<CtrlConstructor> = vec![
             Box::new(OnOffLogic::from_mapping),
             Box::new(EightBitLogic::from_mapping),
             Box::new(RelativeLogic::from_mapping),
         ];
-        let mut ctrls: Vec<Box<dyn CtrlLogic>> = vec![];
+        let mut ctrls: Vec<CtrlLogicBox> = vec![];
         for abstract_mapping in config.mappings.iter() {
             for mapping in abstract_mapping.expand_iter() {
-                let mut logic_opt: Option<Box<dyn CtrlLogic>> = None;
+                let mut logic_opt: Option<CtrlLogicBox> = None;
 
                 for make_logic in &constructors {
                     let Some(logic) = make_logic(&mapping) else {
@@ -39,11 +42,7 @@ impl Interpreter {
             }
         }
 
-        let interp = Interpreter {
-            ctrls
-        };
-
-        interp
+        Interpreter { ctrls }
     }
 
     pub fn handle_ctrl(&mut self, num: u8, val: u8) -> Option<Response> {
@@ -84,7 +83,9 @@ impl Interpreter {
 }
 
 pub trait CtrlLogic: core::fmt::Debug + Send + Sync {
-    fn from_mapping(mapping: &Mapping) -> Option<Box<dyn CtrlLogic>> where Self: Sized;
+    fn from_mapping(mapping: &Mapping) -> Option<Box<dyn CtrlLogic>>
+    where
+        Self: Sized;
     fn handle_ctrl(&mut self, num: u8, val: u8) -> Option<Response>;
     fn handle_osc(&mut self, msg: &OscMessage) -> Option<Response>;
     fn handle_midi(&mut self, msg: &[u8]) -> Option<Response>;
@@ -97,7 +98,7 @@ pub struct OnOffLogic {
     ctrl_out_num: Option<u8>,
     midi: Option<MidiSpec>,
     osc_addr: String,
-    state: bool
+    state: bool,
 }
 
 impl OnOffLogic {
@@ -114,10 +115,10 @@ impl OnOffLogic {
         Response {
             osc: Some(OscResponse {
                 addr: self.osc_addr.clone(),
-                args: vec![OscType::Float(if new_state { 1.0 } else { 0.0 })]
+                args: vec![OscType::Float(if new_state { 1.0 } else { 0.0 })],
             }),
             ctrl: self.ctrl_out_num.map(|num| CtrlResponse {
-                data: vec![num, if new_state { 0x7f } else { 0x00 }]
+                data: vec![num, if new_state { 0x7f } else { 0x00 }],
             }),
             midi: self.midi.map(|midi| {
                 let data = match midi.kind {
@@ -125,14 +126,12 @@ impl OnOffLogic {
                         vec![
                             0b10110000 | midi.channel,
                             midi.num,
-                            if new_state { 0x7f } else { 0x00 }
+                            if new_state { 0x7f } else { 0x00 },
                         ]
                     }
                 };
-                MidiResponse {
-                    data
-                }
-            })
+                MidiResponse { data }
+            }),
         }
     }
 }
@@ -144,19 +143,17 @@ impl CtrlLogic for OnOffLogic {
         };
 
         Some(Box::new(OnOffLogic {
-            mode: mode,
+            mode,
             ctrl_in_num: mapping.ctrl_in_num,
             ctrl_out_num: mapping.ctrl_out_num,
             midi: mapping.midi,
             osc_addr: mapping.osc_addr(),
-            state: false
+            state: false,
         }))
     }
 
     fn handle_ctrl(&mut self, num: u8, val: u8) -> Option<Response> {
-        let Some(ctrl_in_num) = self.ctrl_in_num else {
-            return None;
-        };
+        let ctrl_in_num = self.ctrl_in_num?;
 
         if num != ctrl_in_num {
             return None;
@@ -172,10 +169,10 @@ impl CtrlLogic for OnOffLogic {
                 new_state = pressed;
                 send_ctrl = false;
                 remember = false;
-            },
+            }
             OnOffMode::Momentary => {
                 new_state = pressed;
-            },
+            }
             OnOffMode::Toggle => {
                 if pressed {
                     new_state = !self.state;
@@ -200,15 +197,13 @@ impl CtrlLogic for OnOffLogic {
     }
 
     fn handle_osc(&mut self, msg: &OscMessage) -> Option<Response> {
-        let Some(_num) = self.ctrl_out_num else {
-            return None;
-        };
+        let _num = self.ctrl_out_num?;
 
         if msg.addr != self.osc_addr {
             return None;
         }
 
-        if msg.args.len() < 1 {
+        if msg.args.is_empty() {
             return None;
         }
 
@@ -222,13 +217,9 @@ impl CtrlLogic for OnOffLogic {
     }
 
     fn handle_midi(&mut self, msg: &[u8]) -> Option<Response> {
-        let Some(_num) = self.ctrl_out_num else {
-            return None;
-        };
+        let _num = self.ctrl_out_num?;
 
-        let Some(midi_spec) = self.midi else {
-            return None;
-        };
+        let midi_spec = self.midi?;
 
         if msg.len() != 3 {
             return None;
@@ -258,7 +249,7 @@ pub struct EightBitLogic {
     ctrl_in_lo_num: u8,
     midi: Option<MidiSpec>,
     osc_addr: String,
-    state: [u8;2]
+    state: [u8; 2],
 }
 
 impl CtrlLogic for EightBitLogic {
@@ -267,16 +258,14 @@ impl CtrlLogic for EightBitLogic {
             return None;
         };
 
-        let Some(ref ctrl_in_sequence) = mapping.ctrl_in_sequence else {
-            return None;
-        };
+        let ctrl_in_sequence = mapping.ctrl_in_sequence.as_ref()?;
 
         Some(Box::new(EightBitLogic {
             ctrl_in_hi_num: ctrl_in_sequence[0],
             ctrl_in_lo_num: ctrl_in_sequence[1],
             midi: mapping.midi,
             osc_addr: format!("/{}", mapping.name),
-            state: [0x00,0x00]
+            state: [0x00, 0x00],
         }))
     }
 
@@ -293,23 +282,17 @@ impl CtrlLogic for EightBitLogic {
                 ctrl: None,
                 osc: Some(OscResponse {
                     addr: self.osc_addr.clone(),
-                    args: vec![OscType::Float(val8 as f32 / 255.0)]
+                    args: vec![OscType::Float(val8 as f32 / 255.0)],
                 }),
                 midi: self.midi.map(|midi| {
                     let data = match midi.kind {
                         MidiKind::Cc => {
-                            vec![
-                                0b10110000 | midi.channel,
-                                midi.num,
-                                val8 >> 1
-                            ]
+                            vec![0b10110000 | midi.channel, midi.num, val8 >> 1]
                         }
                     };
-                    MidiResponse {
-                        data
-                    }
-                })
-            })
+                    MidiResponse { data }
+                }),
+            });
         }
 
         None
@@ -331,7 +314,7 @@ pub struct RelativeLogic {
     ctrl_out_num: Option<u8>,
     midi: Option<MidiSpec>,
     osc_addr: String,
-    state: u8
+    state: u8,
 }
 
 impl RelativeLogic {
@@ -347,7 +330,7 @@ impl RelativeLogic {
 
         let ctrl = if encoder_led_val_changed {
             self.ctrl_out_num.map(|num| CtrlResponse {
-                data: vec![num, self.state]
+                data: vec![num, self.state],
             })
         } else {
             None
@@ -357,31 +340,21 @@ impl RelativeLogic {
             ctrl,
             osc: Some(OscResponse {
                 addr: self.osc_addr.clone(),
-                args: vec![OscType::Float(self.state as f32 / 127.0)]
+                args: vec![OscType::Float(self.state as f32 / 127.0)],
             }),
             midi: self.midi.map(|midi| {
                 let data = match midi.kind {
                     MidiKind::Cc => {
-                        vec![
-                            0b10110000 | midi.channel,
-                            midi.num,
-                            self.state
-                        ]
+                        vec![0b10110000 | midi.channel, midi.num, self.state]
                     }
                 };
-                MidiResponse {
-                    data
-                }
-            })
+                MidiResponse { data }
+            }),
         }
     }
 
     fn encoder_led_val(val: u8) -> u8 {
-        if val < 7 {
-            0
-        } else {
-            (val - 7) / 11 * 11 + 7
-        }
+        if val < 7 { 0 } else { (val - 7) / 11 * 11 + 7 }
     }
 }
 
@@ -392,32 +365,33 @@ impl CtrlLogic for RelativeLogic {
         };
 
         Some(Box::new(RelativeLogic {
-            mode: mode,
+            mode,
             ctrl_in_num: mapping.ctrl_in_num,
             ctrl_out_num: mapping.ctrl_out_num,
             midi: mapping.midi,
             osc_addr: mapping.osc_addr(),
-            state: 0x00
+            state: 0x00,
         }))
     }
 
     fn handle_ctrl(&mut self, num: u8, val: u8) -> Option<Response> {
-        let Some(ctrl_in_num) = self.ctrl_in_num else {
-            return None;
-        };
+        let ctrl_in_num = self.ctrl_in_num?;
 
         if num != ctrl_in_num {
             return None;
         }
 
-        let delta: i8 = if val < 0x40 { val as i8 } else { val as i8 + i8::MIN };
+        let delta: i8 = if val < 0x40 {
+            val as i8
+        } else {
+            val as i8 + i8::MIN
+        };
         let response = match self.mode {
-            RelativeMode::Raw => {
-                OscResponse {
-                    addr: self.osc_addr.clone(),
-                    args: vec![OscType::Float(delta as f32)]
-                }.into()
-            },
+            RelativeMode::Raw => OscResponse {
+                addr: self.osc_addr.clone(),
+                args: vec![OscType::Float(delta as f32)],
+            }
+            .into(),
             RelativeMode::Accumulate => {
                 self.update(self.state.saturating_add_signed(delta).min(127))
             }
@@ -427,15 +401,13 @@ impl CtrlLogic for RelativeLogic {
     }
 
     fn handle_osc(&mut self, msg: &OscMessage) -> Option<Response> {
-        let Some(_num) = self.ctrl_out_num else {
-            return None;
-        };
+        let _num = self.ctrl_out_num?;
 
         if msg.addr != self.osc_addr {
             return None;
         }
 
-        if msg.args.len() < 1 {
+        if msg.args.is_empty() {
             return None;
         }
 
@@ -451,13 +423,9 @@ impl CtrlLogic for RelativeLogic {
     }
 
     fn handle_midi(&mut self, msg: &[u8]) -> Option<Response> {
-        let Some(_num) = self.ctrl_out_num else {
-            return None;
-        };
+        let _num = self.ctrl_out_num?;
 
-        let Some(midi_spec) = self.midi else {
-            return None;
-        };
+        let midi_spec = self.midi?;
 
         if msg.len() != 3 {
             return None;
@@ -483,7 +451,7 @@ impl CtrlLogic for RelativeLogic {
 
 #[derive(Debug)]
 pub struct CtrlResponse {
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -494,14 +462,14 @@ pub struct OscResponse {
 
 #[derive(Debug)]
 pub struct MidiResponse {
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 #[derive(Debug)]
 pub struct Response {
     pub ctrl: Option<CtrlResponse>,
     pub osc: Option<OscResponse>,
-    pub midi: Option<MidiResponse>
+    pub midi: Option<MidiResponse>,
 }
 
 impl Response {
@@ -509,41 +477,41 @@ impl Response {
         Response {
             ctrl: None,
             osc: None,
-            midi: None
+            midi: None,
         }
     }
 }
 
-impl Into<Response> for CtrlResponse {
-    fn into(self) -> Response {
+impl From<CtrlResponse> for Response {
+    fn from(val: CtrlResponse) -> Self {
         Response {
-            ctrl: Some(self),
+            ctrl: Some(val),
             osc: None,
-            midi: None
+            midi: None,
         }
     }
 }
 
-impl Into<Response> for OscResponse {
-    fn into(self) -> Response {
+impl From<OscResponse> for Response {
+    fn from(val: OscResponse) -> Self {
         Response {
             ctrl: None,
-            osc: Some(self),
-            midi: None
+            osc: Some(val),
+            midi: None,
         }
     }
 }
 
-impl Into<Response> for MidiResponse {
-    fn into(self) -> Response {
+impl From<MidiResponse> for Response {
+    fn from(val: MidiResponse) -> Self {
         Response {
             ctrl: None,
             osc: None,
-            midi: Some(self)
+            midi: Some(val),
         }
     }
 }
 
 fn float_to_7bit(val: f32) -> u8 {
-    (val.max(0.0).min(1.0) * 127.0).round() as u8
+    (val.clamp(0.0, 1.0) * 127.0).round() as u8
 }

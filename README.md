@@ -37,7 +37,7 @@ MIDI compatible applications on your computer should now see virtual input/outpu
 
 to view the full list of supported command-line options, run `autocrap -h`:
 
-```
+```shell
 Usage: autocrap [OPTIONS] --config <FILE>
 
 Options:
@@ -57,7 +57,7 @@ on Linux, your user must have permission to access the USB device. you may need 
 
 create the file `/etc/udev/rules.d/51-nocturn.rules` with the contents:
 
-```
+```udev
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1235", ATTRS{idProduct}=="000a", MODE="0666"
 ```
 
@@ -79,7 +79,7 @@ on Windows, you must also install a generic USB driver for the device in order t
 
 due to limitations in the midir library, virtual MIDI ports are currently unsupported on Windows. as an alternative, you can use [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html). in loopMIDI, create two virtual ports named `autocrap in` and `autocrap out`, then reference them using `Name` ports in your configuration:
 
-```
+```json
   "interface": {"Midi": {
     "client_name": "autocrap",
     "out_port": {"Name": "autocrap out"},
@@ -99,7 +99,7 @@ there is no need to edit these, unless you are creating a configuration to suppo
 
 for the Nocturn, these values should be:
 
-```
+```json
   "vendor_id": 4661,
   "product_id": 10,
   "in_endpoint": 1,
@@ -122,7 +122,7 @@ configures autocrap to communicate over either MIDI or OSC.
 
 example configuration:
 
-```
+```json
   "interface": {"Midi": {
     "client_name": "autocrap",
     "out_port": {"Virtual": "autocrap"},
@@ -140,7 +140,7 @@ MIDI ports where autocrap will send output and read input. autocrap can create i
 
 ###### virtual port
 
-```
+```json
     "out_port": {"Virtual": "autocrap"},
 ```
 
@@ -148,7 +148,7 @@ will create a virtual output port named `autocrap`. you can change the name to w
 
 ###### existing port, by name
 
-```
+```json
     "out_port": {"Name": "Scarlett 6i6 USB"},
 ```
 
@@ -156,7 +156,7 @@ will send to the output port called `Scarlett 6i6 USB`. note that port naming co
 
 ###### existing port, by index
 
-```
+```json
     "out_port": {"Index": 0},
 ```
 
@@ -166,7 +166,7 @@ will send to the first output port on the computer. this is probably not a good 
 
 example configuration:
 
-```
+```json
   "interface": {"Osc": {
     "host_addr": "127.0.0.1:9900",
     "out_addr": "127.0.0.1:9901",
@@ -190,7 +190,7 @@ a list of single mappings and/or range mappings, specifying how autocrap should 
 
 #### single mapping
 
-```
+```json
     {"Single": {
       "name": "speedDial",
       "ctrl_in_num": 74,
@@ -222,7 +222,7 @@ specifies what kind of control is in question. the following kinds are supported
 
 ###### `Relative`
 
-```
+```json
         "ctrl_kind": {"Relative": {"mode": "Accumulate"}},
 ```
 
@@ -235,7 +235,7 @@ a relative control sends increment/decrement values. an example is the rotary en
 
 ###### `OnOff`
 
-```
+```json
         "ctrl_kind": {"OnOff": {"mode": "Toggle"}},
 ```
 
@@ -249,7 +249,7 @@ sends on/off values. examples include the Nocturn's buttons, as well as the touc
 
 ###### `EightBit`
 
-```
+```json
       "ctrl_in_sequence": [72, 73],
       "ctrl_kind": "EightBit",
 ```
@@ -270,7 +270,7 @@ specifies the MIDI message corresponding to the control.
 
 #### range mapping
 
-```
+```json
     {"Range": {
       "count": 16,
       "mapping": {
@@ -294,7 +294,7 @@ this is a shorthand for defining a sequence of similar mappings. `count` specifi
 
 essentially, the range mapping example above expands to:
 
-```
+```json
     {"Single": {
         "name": "button0",
         "ctrl_in_num": 112,
