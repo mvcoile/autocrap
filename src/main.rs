@@ -52,7 +52,7 @@ struct Options {
 
     /// Set logging level
     #[arg(short, long)]
-    log: Option<String>,
+    log: Option<log::LevelFilter>,
 }
 
 fn main() {
@@ -63,8 +63,8 @@ fn run() -> Result<()> {
     let options = Options::parse();
 
     let mut log_builder = env_logger::Builder::new();
-    if let Some(ref filters_str) = options.log {
-        log_builder.parse_filters(filters_str);
+    if let Some(level_filter) = options.log {
+        log_builder.filter_level(level_filter);
     }
     log_builder.init();
 
