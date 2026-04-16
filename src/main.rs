@@ -29,5 +29,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config: Config = serde_json::from_reader(BufReader::new(File::open(&options.config)?))?;
     info!("config: {:?}", config);
 
-    autocrap::run(config)
+    autocrap::run(config)?;
+    Ok(())
 }

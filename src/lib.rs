@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     net::UdpSocket,
     sync::{Arc, RwLock, mpsc},
     thread,
@@ -20,10 +19,13 @@ use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferT
 mod autocrap;
 pub use autocrap::{config, interpreter};
 
+pub mod error;
+pub use error::Error;
+
 use crate::config::{Config, Interface, MidiInterface, MidiPort, OscInterface};
 use crate::interpreter::{CtrlResponse, Interpreter, MidiResponse, OscResponse};
 
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
+type Result<T> = std::result::Result<T, Error>;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1000);
 
@@ -38,18 +40,18 @@ struct Endpoint {
     direction: Direction,
 }
 
-pub fn run(config: Config) -> std::result::Result<(), Box<dyn Error>> {
-    let mut context = Context::new().unwrap();
+pub fn run(config: Config) -> Result<()> {
+    let mut context = Context::new()?;
 
     match open_device(&mut context, config.vendor_id, config.product_id) {
         Some((mut device, device_desc, mut handle)) => {
-            handle.reset().unwrap();
+            handle.reset()?;
 
-            let languages = handle.read_languages(DEFAULT_TIMEOUT).unwrap();
+            let languages = handle.read_languages(DEFAULT_TIMEOUT)?;
 
             info!(
                 "active configuration: {}",
-                handle.active_configuration().unwrap()
+                handle.active_configuration()?
             );
             info!("languages: {:?}", languages);
 
@@ -81,15 +83,14 @@ pub fn run(config: Config) -> std::result::Result<(), Box<dyn Error>> {
                     && e.transfer_type == TransferType::Interrupt
                     && e.direction == Direction::In
             })
-            .ok_or("control in endpoint not found")
-            .unwrap();
+            .ok_or(Error::EndpointNotFound("control in"))?;
+
             let ctrl_out_endpoint = find_endpoint(&mut device, &device_desc, |e| {
                 e.config == config.out_endpoint
                     && e.transfer_type == TransferType::Interrupt
                     && e.direction == Direction::Out
             })
-            .ok_or("control out endpoint not found")
-            .unwrap();
+            .ok_or(Error::EndpointNotFound("control out"))?;
 
             info!("control in endpoint: {:?}", ctrl_in_endpoint);
             info!("control out endpoint: {:?}", ctrl_out_endpoint);
@@ -98,17 +99,16 @@ pub fn run(config: Config) -> std::result::Result<(), Box<dyn Error>> {
                 Ok(()) => Ok(()),
                 Err(rusb::Error::NotSupported) => Ok(()),
                 err => err,
-            }
-            .unwrap();
+            }?;
 
-            configure_endpoint(&mut handle, &ctrl_in_endpoint).unwrap();
-            configure_endpoint(&mut handle, &ctrl_out_endpoint).unwrap();
+            configure_endpoint(&mut handle, &ctrl_in_endpoint)?;
+            configure_endpoint(&mut handle, &ctrl_out_endpoint)?;
 
             let interpreter = Arc::new(RwLock::new(Interpreter::new(&config)));
             let (receiver_ctrl_tx, ctrl_rx) = mpsc::channel();
             let reader_ctrl_tx = receiver_ctrl_tx.clone();
 
-            write_init(&mut handle, ctrl_out_endpoint.address).unwrap();
+            write_init(&mut handle, ctrl_out_endpoint.address)?;
 
             thread::scope(|s| {
                 let writer_thread = s.spawn(|| {
@@ -138,8 +138,8 @@ pub fn run(config: Config) -> std::result::Result<(), Box<dyn Error>> {
                     std::process::exit(0);
                 }
 
-                receiver_thread.join().unwrap();
-                writer_thread.join().unwrap();
+                receiver_thread.join().expect("receiver thread panicked");
+                writer_thread.join().expect("writer thread panicked");
             });
         }
         None => error!(
@@ -255,27 +255,33 @@ fn run_reader<T: UsbContext>(
         let client_name = &interface.client_name;
         let midi_out = MidiOutput::new(client_name)?;
         match interface.out_port {
-            MidiPort::Index(index) => Some(midi_out.ports().remove(index)).map(|p| {
-                (
-                    midi_out.port_name(&p).unwrap(),
-                    midi_out.connect(&p, client_name).unwrap(),
-                )
-            }),
+            MidiPort::Index(index) => {
+                let p = midi_out.ports().remove(index);
+                let name = midi_out.port_name(&p)?;
+                let conn = midi_out
+                    .connect(&p, client_name)
+                    .map_err(|e| Error::MidiConnect(e.kind()))?;
+                Some((name, conn))
+            }
             MidiPort::Name(ref name) => midi_out
                 .ports()
                 .into_iter()
-                .find(|p| &midi_out.port_name(p).unwrap() == name)
-                .map(|p| {
-                    (
-                        midi_out.port_name(&p).unwrap(),
-                        midi_out.connect(&p, client_name).unwrap(),
-                    )
-                }),
+                .find(|p| midi_out.port_name(p).as_deref() == Ok(name.as_str()))
+                .map(|p| -> Result<_> {
+                    let port_name = midi_out.port_name(&p)?;
+                    let conn = midi_out
+                        .connect(&p, client_name)
+                        .map_err(|e| Error::MidiConnect(e.kind()))?;
+                    Ok((port_name, conn))
+                })
+                .transpose()?,
             #[cfg(unix)]
-            MidiPort::Virtual(ref _name) => Some((
-                client_name.to_string(),
-                midi_out.create_virtual(client_name).unwrap(),
-            )),
+            MidiPort::Virtual(ref _name) => {
+                let conn = midi_out
+                    .create_virtual(client_name)
+                    .map_err(|e| Error::MidiConnect(e.kind()))?;
+                Some((client_name.to_string(), conn))
+            }
             #[cfg(not(unix))]
             MidiPort::Virtual(ref _name) => {
                 unimplemented!("virtual midi ports are currently unsupported on non-unix systems")
@@ -314,7 +320,11 @@ fn run_reader<T: UsbContext>(
             let num = bytes[0];
             let val = bytes[1];
 
-            let Some(response) = interpreter.write().unwrap().handle_ctrl(num, val) else {
+            let Some(response) = interpreter
+                .write()
+                .expect("interpreter lock poisoned")
+                .handle_ctrl(num, val)
+            else {
                 warn!("unhandled data: {:02x?}", bytes);
                 continue;
             };
@@ -337,7 +347,7 @@ fn run_reader<T: UsbContext>(
             }
 
             if let Some(CtrlResponse { data }) = response.ctrl {
-                ctrl_tx.send(data)?;
+                ctrl_tx.send(data).map_err(|_| Error::ChannelSend)?;
             }
         }
     }
@@ -375,7 +385,11 @@ fn run_osc_receiver(
                 match packet {
                     OscPacket::Message(msg) => {
                         debug!("recv osc: {} {:?}", msg.addr, msg.args);
-                        let Some(response) = interpreter.write().unwrap().handle_osc(&msg) else {
+                        let Some(response) = interpreter
+                            .write()
+                            .expect("interpreter lock poisoned")
+                            .handle_osc(&msg)
+                        else {
                             warn!(
                                 "unhandled osc message: with size {} from {}: {} {:?}",
                                 size, addr, msg.addr, msg.args
@@ -389,7 +403,7 @@ fn run_osc_receiver(
                             continue;
                         };
 
-                        ctrl_tx.send(data)?
+                        ctrl_tx.send(data).map_err(|_| Error::ChannelSend)?;
                     }
                     OscPacket::Bundle(bundle) => {
                         debug!("recv osc bundle: {:?}", bundle);
@@ -422,55 +436,55 @@ fn run_midi_receiver(
     };
 
     let (tx, rx) = mpsc::channel();
-    let midi_in = MidiInput::new(client_name).unwrap();
+    let midi_in = MidiInput::new(client_name)?;
     let midi = match in_port {
-        MidiPort::Index(index) => Some(midi_in.ports().remove(*index)).map(|p| {
-            (
-                midi_in.port_name(&p).unwrap(),
-                midi_in
+        MidiPort::Index(index) => {
+            let p = midi_in.ports().remove(*index);
+            let name = midi_in.port_name(&p)?;
+            let conn = midi_in
+                .connect(
+                    &p,
+                    client_name,
+                    move |_time, msg, tx| {
+                        tx.send(msg.to_vec()).expect("MIDI rx channel closed");
+                    },
+                    tx,
+                )
+                .map_err(|e| Error::MidiConnect(e.kind()))?;
+            Some((name, conn))
+        }
+        MidiPort::Name(name) => midi_in
+            .ports()
+            .into_iter()
+            .find(|p| midi_in.port_name(p).as_deref() == Ok(name.as_str()))
+            .map(|p| -> Result<_> {
+                let port_name = midi_in.port_name(&p)?;
+                let conn = midi_in
                     .connect(
                         &p,
                         client_name,
                         move |_time, msg, tx| {
-                            tx.send(msg.to_vec()).unwrap();
+                            tx.send(msg.to_vec()).expect("MIDI rx channel closed");
                         },
                         tx,
                     )
-                    .unwrap(),
-            )
-        }),
-        MidiPort::Name(name) => midi_in
-            .ports()
-            .into_iter()
-            .find(|p| &midi_in.port_name(p).unwrap() == name)
-            .map(|p| {
-                (
-                    midi_in.port_name(&p).unwrap(),
-                    midi_in
-                        .connect(
-                            &p,
-                            client_name,
-                            move |_time, msg, tx| {
-                                tx.send(msg.to_vec()).unwrap();
-                            },
-                            tx,
-                        )
-                        .unwrap(),
-                )
-            }),
+                    .map_err(|e| Error::MidiConnect(e.kind()))?;
+                Ok((port_name, conn))
+            })
+            .transpose()?,
         #[cfg(unix)]
-        MidiPort::Virtual(_name) => Some((
-            client_name.to_string(),
-            midi_in
+        MidiPort::Virtual(_name) => {
+            let conn = midi_in
                 .create_virtual(
                     client_name,
                     move |_time, msg, tx| {
-                        tx.send(msg.to_vec()).unwrap();
+                        tx.send(msg.to_vec()).expect("MIDI rx channel closed");
                     },
                     tx,
                 )
-                .unwrap(),
-        )),
+                .map_err(|e| Error::MidiConnect(e.kind()))?;
+            Some((client_name.to_string(), conn))
+        }
         #[cfg(not(unix))]
         MidiPort::Virtual(ref _name) => {
             unimplemented!("virtual midi ports are currently unsupported on non-unix systems")
@@ -482,8 +496,12 @@ fn run_midi_receiver(
     }
 
     loop {
-        let msg = rx.recv().unwrap();
-        let Some(response) = interpreter.write().unwrap().handle_midi(&msg) else {
+        let msg = rx.recv()?;
+        let Some(response) = interpreter
+            .write()
+            .expect("interpreter lock poisoned")
+            .handle_midi(&msg)
+        else {
             warn!("unhandled midi message: {:02x?}", msg);
             continue;
         };
@@ -492,6 +510,6 @@ fn run_midi_receiver(
             continue;
         };
 
-        ctrl_tx.send(data)?
+        ctrl_tx.send(data).map_err(|_| Error::ChannelSend)?;
     }
 }
