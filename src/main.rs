@@ -50,7 +50,7 @@ struct Options {
     #[arg(short, long, value_name = "FILE")]
     config: PathBuf,
 
-    /// Set logging level
+    /// Set logging level: Off, Error, Warn, Info, Debug or Trace
     #[arg(short, long)]
     log: Option<log::LevelFilter>,
 }
