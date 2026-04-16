@@ -615,9 +615,10 @@ mod tests {
 
     #[test]
     fn onoff_raw_sends_osc_not_ctrl() {
-        let mut logic =
-            OnOffLogic::from_mapping(&make_mapping(CtrlKind::OnOff { mode: OnOffMode::Raw }))
-                .unwrap();
+        let mut logic = OnOffLogic::from_mapping(&make_mapping(CtrlKind::OnOff {
+            mode: OnOffMode::Raw,
+        }))
+        .unwrap();
         let press = logic.handle_ctrl(0x10, 0x7f).unwrap();
         assert!(press.ctrl.is_none(), "Raw mode must not send ctrl feedback");
         assert_eq!(osc_float(&press), Some(1.0));
@@ -684,7 +685,9 @@ mod tests {
     fn onoff_no_ctrl_in_num_returns_none() {
         let mapping = Mapping {
             ctrl_in_num: None,
-            ..make_mapping(CtrlKind::OnOff { mode: OnOffMode::Momentary })
+            ..make_mapping(CtrlKind::OnOff {
+                mode: OnOffMode::Momentary,
+            })
         };
         let mut logic = OnOffLogic::from_mapping(&mapping).unwrap();
         assert!(logic.handle_ctrl(0x10, 0x7f).is_none());
@@ -835,7 +838,9 @@ mod tests {
     fn relative_no_ctrl_in_num_returns_none() {
         let mapping = Mapping {
             ctrl_in_num: None,
-            ..make_mapping(CtrlKind::Relative { mode: RelativeMode::Accumulate })
+            ..make_mapping(CtrlKind::Relative {
+                mode: RelativeMode::Accumulate,
+            })
         };
         let mut logic = RelativeLogic::from_mapping(&mapping).unwrap();
         assert!(logic.handle_ctrl(0x10, 0x7f).is_none());
@@ -868,18 +873,22 @@ mod tests {
 
     #[test]
     fn interpreter_routes_known_ctrl_num() {
-        let config = make_config(vec![AbstractMapping::Single(make_mapping(CtrlKind::OnOff {
-            mode: OnOffMode::Momentary,
-        }))]);
+        let config = make_config(vec![AbstractMapping::Single(make_mapping(
+            CtrlKind::OnOff {
+                mode: OnOffMode::Momentary,
+            },
+        ))]);
         let mut interp = Interpreter::new(&config);
         assert!(interp.handle_ctrl(0x10, 0x7f).is_some());
     }
 
     #[test]
     fn interpreter_returns_none_for_unknown_ctrl_num() {
-        let config = make_config(vec![AbstractMapping::Single(make_mapping(CtrlKind::OnOff {
-            mode: OnOffMode::Momentary,
-        }))]);
+        let config = make_config(vec![AbstractMapping::Single(make_mapping(
+            CtrlKind::OnOff {
+                mode: OnOffMode::Momentary,
+            },
+        ))]);
         let mut interp = Interpreter::new(&config);
         assert!(interp.handle_ctrl(0x99, 0x7f).is_none());
     }
