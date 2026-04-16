@@ -49,10 +49,7 @@ pub fn run(config: Config) -> Result<()> {
 
             let languages = handle.read_languages(DEFAULT_TIMEOUT)?;
 
-            info!(
-                "active configuration: {}",
-                handle.active_configuration()?
-            );
+            info!("active configuration: {}", handle.active_configuration()?);
             info!("languages: {:?}", languages);
 
             if !languages.is_empty() {
@@ -305,27 +302,15 @@ fn run_reader<T: UsbContext>(
             };
 
         trace!("read({:?}): {:02x?}", num_bytes, &all_bytes[..num_bytes]);
-        let mut i = 0;
-        while i + 1 < num_bytes {
-            if all_bytes[i] == 0xb0 {
-                i += 1;
-                continue;
-            }
-
-            let bytes = &all_bytes[i..i + 2];
-            i += 2;
-
-            trace!("bytes: {:02x?}", bytes);
-
-            let num = bytes[0];
-            let val = bytes[1];
+        for (num, val) in parse_ctrl_bytes(&all_bytes[..num_bytes]) {
+            trace!("bytes: {:02x?}", [num, val]);
 
             let Some(response) = interpreter
                 .write()
                 .expect("interpreter lock poisoned")
                 .handle_ctrl(num, val)
             else {
-                warn!("unhandled data: {:02x?}", bytes);
+                warn!("unhandled data: {:02x?}", [num, val]);
                 continue;
             };
 
@@ -351,6 +336,20 @@ fn run_reader<T: UsbContext>(
             }
         }
     }
+}
+
+fn parse_ctrl_bytes(buf: &[u8]) -> Vec<(u8, u8)> {
+    let mut pairs = Vec::new();
+    let mut i = 0;
+    while i + 1 < buf.len() {
+        if buf[i] == 0xb0 {
+            i += 1;
+            continue;
+        }
+        pairs.push((buf[i], buf[i + 1]));
+        i += 2;
+    }
+    pairs
 }
 
 fn run_writer<T: UsbContext>(
@@ -511,5 +510,53 @@ fn run_midi_receiver(
         };
 
         ctrl_tx.send(data).map_err(|_| Error::ChannelSend)?;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ctrl_bytes;
+
+    #[test]
+    fn parse_ctrl_empty() {
+        assert_eq!(parse_ctrl_bytes(&[]), vec![]);
+    }
+
+    #[test]
+    fn parse_ctrl_simple_pair() {
+        assert_eq!(parse_ctrl_bytes(&[0x10, 0x7f]), vec![(0x10, 0x7f)]);
+    }
+
+    #[test]
+    fn parse_ctrl_multiple_pairs() {
+        assert_eq!(
+            parse_ctrl_bytes(&[0x10, 0x7f, 0x20, 0x00]),
+            vec![(0x10, 0x7f), (0x20, 0x00)]
+        );
+    }
+
+    #[test]
+    fn parse_ctrl_skips_leading_marker_byte() {
+        assert_eq!(parse_ctrl_bytes(&[0xb0, 0x10, 0x7f]), vec![(0x10, 0x7f)]);
+    }
+
+    #[test]
+    fn parse_ctrl_marker_between_pairs() {
+        assert_eq!(
+            parse_ctrl_bytes(&[0x10, 0x7f, 0xb0, 0x20, 0x00]),
+            vec![(0x10, 0x7f), (0x20, 0x00)]
+        );
+    }
+
+    #[test]
+    fn parse_ctrl_trailing_single_byte_ignored() {
+        // odd byte at end can't form a pair — silently dropped
+        assert_eq!(parse_ctrl_bytes(&[0x10, 0x7f, 0x20]), vec![(0x10, 0x7f)]);
+    }
+
+    #[test]
+    fn parse_ctrl_marker_then_single_byte_ignored() {
+        // marker advances i by 1, leaving only 1 byte — not enough for a pair
+        assert_eq!(parse_ctrl_bytes(&[0xb0, 0x10]), vec![]);
     }
 }
