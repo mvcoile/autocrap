@@ -158,14 +158,19 @@ fn run() -> Result<()> {
                     }
                 });
 
-                run_reader(
+                if let Err(e) = run_reader(
                     &config,
                     &interpreter,
                     &handle,
                     &ctrl_in_endpoint,
                     reader_ctrl_tx,
-                )
-                .unwrap();
+                ) {
+                    info!("device disconnected ({}), shutting down", e);
+                    // The receiver thread blocks on MIDI/OSC input indefinitely and
+                    // has no shutdown signal, so we exit the process directly and
+                    // let the OS clean up the remaining threads.
+                    std::process::exit(0);
+                }
 
                 receiver_thread.join().unwrap();
                 writer_thread.join().unwrap();
@@ -319,11 +324,15 @@ fn run_reader<T: UsbContext>(
     let mut all_bytes = [0u8; 8];
 
     loop {
-        let Ok(num_bytes) =
-            handle.read_interrupt(endpoint.address, &mut all_bytes, DEFAULT_TIMEOUT)
-        else {
-            continue;
-        };
+        let num_bytes =
+            match handle.read_interrupt(endpoint.address, &mut all_bytes, DEFAULT_TIMEOUT) {
+                Ok(n) => n,
+                Err(rusb::Error::Timeout) => continue,
+                Err(e) => {
+                    info!("device disconnected ({}), exiting", e);
+                    return Err(e.into());
+                }
+            };
 
         trace!("read({:?}): {:02x?}", num_bytes, &all_bytes[..num_bytes]);
         let mut i = 0;
