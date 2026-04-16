@@ -1,1 +1,44 @@
-/target
+### Rust ###
+# rust specific files
+/target/
+**/*.rs.bk
+debug/
+target/debug/
+target/release/
+
+# MSVC Windows builds of rustc generate these, which store debugging information
+*.pdb
+
+# Tool
+.valgrindrc
+.cargo
+
+# Contains mutation testing data
+**/mutants.out*/
+
+### Universal ###
+# Common files that should be ignored in all projects
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*~
+*.bak
+
+# Environment files (containing secrets, API keys, credentials)
+.env
+*.env
+.env.*
+
+# Local configuration that shouldn't be shared
+*.local
+
+# File system
+.DS_Store
+desktop.ini
+
+# Editor
+.vscode
+.helix/
+.zed/
