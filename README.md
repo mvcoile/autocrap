@@ -33,45 +33,7 @@ the default config (currently `nocturn-midi`) let's you use the Nocturn as a typ
 autocrap
 ```
 
-to use a specific built-in preset, use `--preset` (or `-p`):
-
-```shell
-autocrap -p nocturn-midi
-autocrap -p nocturn-osc
-autocrap -p nocturn-osc-raw
-```
-
 MIDI compatible applications on your computer should now see virtual input/output ports for autocrap!
-
-to use a custom config file instead, use `--config` (or `-c`):
-
-```shell
-autocrap -c my-config.json
-```
-
-`--config` and `--preset` are mutually exclusive. when a relative path or bare filename is given to `--config`, autocrap searches for it in two locations, in order:
-
-1. the current working directory
-2. the platform config directory (see below)
-
-an absolute path is used directly without any search.
-
-#### config directory
-
-autocrap looks for config files in a platform-specific directory:
-
-| platform | path |
-|----------|------|
-| Linux / macOS | `~/.config/autocrap/` |
-| Windows | `%APPDATA%\autocrap\` |
-
-to print the exact path on your system, run:
-
-```shell
-autocrap --print-config-dir
-```
-
-placing a config file there lets you reference it by filename from anywhere, e.g. `autocrap -c my-config.json`.
 
 to view the full list of supported command-line options, run `autocrap -h`:
 
@@ -88,6 +50,48 @@ Options:
 ```
 
 the logging level defaults to `info`. you can also set it to `debug` or `trace` to get more debugging information.
+
+### presets
+
+to use a specific built-in preset, use `--preset` (or `-p`):
+
+```shell
+autocrap -p nocturn-midi
+autocrap -p nocturn-osc
+autocrap -p nocturn-osc-raw
+```
+
+### custom configs
+
+to use a custom config file instead, use `--config` (or `-c`):
+
+```shell
+autocrap -c my-config.json
+```
+
+`--config` and `--preset` are mutually exclusive. when a relative path or bare filename is given to `--config`, autocrap searches for it in two locations, in order:
+
+1. the current working directory
+2. the platform config directory (see below)
+
+an absolute path is used directly without any search.
+
+### config directory
+
+autocrap looks for config files in a platform-specific directory:
+
+| platform | path |
+|----------|------|
+| Linux / macOS | `~/.config/autocrap/` |
+| Windows | `%APPDATA%\autocrap\` |
+
+to print the exact path on your system, run:
+
+```shell
+autocrap --print-config-dir
+```
+
+placing a config file there lets you reference it by filename from anywhere, e.g. `autocrap -c my-config.json`.
 
 ### Linux
 
