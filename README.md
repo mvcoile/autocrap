@@ -35,6 +35,8 @@ autocrap
 
 MIDI compatible applications on your computer should now see virtual input/output ports for autocrap!
 
+### options
+
 to view the full list of supported command-line options, run `autocrap -h`:
 
 ```shell
