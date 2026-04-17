@@ -1,7 +1,7 @@
 use log::{info, warn};
 use rosc::{OscMessage, OscType};
 
-use super::config::{Config, CtrlKind, Mapping, MidiKind, MidiSpec, OnOffMode, RelativeMode};
+use super::schema::{Config, CtrlKind, Mapping, MidiKind, MidiSpec, OnOffMode, RelativeMode};
 
 type CtrlLogicBox = Box<dyn CtrlLogic>;
 type CtrlConstructor = Box<dyn Fn(&Mapping) -> Option<CtrlLogicBox>>;
@@ -530,7 +530,7 @@ fn float_to_7bit(val: f32) -> u8 {
 mod tests {
     use rosc::OscType;
 
-    use super::super::config::{
+    use super::super::schema::{
         AbstractMapping, Config, CtrlKind, Interface, Mapping, OnOffMode, OscInterface,
         RelativeMode,
     };

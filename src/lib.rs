@@ -17,13 +17,13 @@ use rosc::{OscMessage, OscPacket};
 use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, TransferType, UsbContext};
 
 mod autocrap;
-pub use autocrap::{config, interpreter};
+pub use autocrap::{interpreter, schema};
 
 pub mod error;
 pub use error::Error;
 
-use crate::config::{Config, Interface, MidiInterface, MidiPort, OscInterface};
 use crate::interpreter::{CtrlResponse, Interpreter, MidiResponse, OscResponse};
+use crate::schema::{Config, Interface, MidiInterface, MidiPort, OscInterface};
 
 type Result<T> = std::result::Result<T, Error>;
 
