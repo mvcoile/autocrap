@@ -44,10 +44,32 @@ MIDI compatible applications on your computer should now see virtual input/outpu
 to use a custom config file instead, use `--config` (or `-c`):
 
 ```shell
-autocrap -c /path/to/my-config.json
+autocrap -c my-config.json
 ```
 
-`--config` and `--preset` are mutually exclusive.
+`--config` and `--preset` are mutually exclusive. when a relative path or bare filename is given to `--config`, autocrap searches for it in two locations, in order:
+
+1. the current working directory
+2. the platform config directory (see below)
+
+an absolute path is used directly without any search.
+
+#### config directory
+
+autocrap looks for config files in a platform-specific directory:
+
+| platform | path |
+|----------|------|
+| Linux / macOS | `~/.config/autocrap/` |
+| Windows | `%APPDATA%\autocrap\` |
+
+to print the exact path on your system, run:
+
+```shell
+autocrap --print-config-dir
+```
+
+placing a config file there lets you reference it by filename from anywhere, e.g. `autocrap -c my-config.json`.
 
 to view the full list of supported command-line options, run `autocrap -h`:
 
@@ -55,8 +77,9 @@ to view the full list of supported command-line options, run `autocrap -h`:
 Usage: autocrap [OPTIONS]
 
 Options:
-  -c, --config <FILE>  Path to a config file
+  -c, --config <FILE>  Path to a config file (searches current directory and platform config dir)
   -p, --preset <NAME>  Use a built-in preset config: nocturn-midi, nocturn-osc, nocturn-osc-raw
+      --print-config-dir  Print the platform config directory and exit
   -l, --log <LOG>      Set logging level: Off, Error, Warn, Info, Debug or Trace
   -h, --help           Print help
   -V, --version        Print version
