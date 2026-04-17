@@ -25,24 +25,39 @@ download a prebuilt binary from [Releases](https://github.com/ahihi/autocrap/rel
 > - [Linux](#linux)
 > - [Windows](#windows)
 
-autocrap requires a configuration JSON file to run. some [example configurations](config) are provided.
+autocrap can run with a built-in preset config or a custom configuration JSON file. Some [example configurations](config) are provided.
 
-for example, to use the Nocturn as a typical MIDI controller, run:
+The default config (currently `nocturn-midi`) let's you use the Nocturn as a typical MIDI controller, so it can be run without any arguments.
 
 ```shell
-autocrap -c config/nocturn-midi.json
+autocrap
+```
+
+to use a specific built-in preset, use `--preset` (or `-p`):
+
+```shell
+autocrap -p nocturn-midi
 ```
 
 MIDI compatible applications on your computer should now see virtual input/output ports for autocrap!
 
+to use a custom config file instead, use `--config` (or `-c`):
+
+```shell
+autocrap -c /path/to/my-config.json
+```
+
+`--config` and `--preset` are mutually exclusive.
+
 to view the full list of supported command-line options, run `autocrap -h`:
 
 ```shell
-Usage: autocrap [OPTIONS] --config <FILE>
+Usage: autocrap [OPTIONS]
 
 Options:
-  -c, --config <FILE>  Set a config file
-  -l, --log <LOG>      Set logging level
+  -c, --config <FILE>  Path to a config file
+  -p, --preset <NAME>  Use a built-in preset config: nocturn-midi, nocturn-osc, nocturn-osc-raw
+  -l, --log <LOG>      Set logging level: Off, Error, Warn, Info, Debug or Trace
   -h, --help           Print help
   -V, --version        Print version
 ```
