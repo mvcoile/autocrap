@@ -27,7 +27,7 @@ download a prebuilt binary from [Releases](https://github.com/ahihi/autocrap/rel
 
 autocrap can run with a built-in preset config or a custom configuration JSON file. Some [example configurations](config) are provided.
 
-The default config (currently `nocturn-midi`) let's you use the Nocturn as a typical MIDI controller, so it can be run without any arguments.
+the default config (currently `nocturn-midi`) let's you use the Nocturn as a typical MIDI controller, so it can be run without any arguments.
 
 ```shell
 autocrap
@@ -37,6 +37,8 @@ to use a specific built-in preset, use `--preset` (or `-p`):
 
 ```shell
 autocrap -p nocturn-midi
+autocrap -p nocturn-osc
+autocrap -p nocturn-osc-raw
 ```
 
 MIDI compatible applications on your computer should now see virtual input/output ports for autocrap!
